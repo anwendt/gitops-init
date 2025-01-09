@@ -344,7 +344,7 @@ metadata:
 spec:
   project: default
   source:
-    path: bootstrap
+    path: k8s-bootstrap
     repoURL: https://$GIT_URL
     targetRevision: HEAD
   destination:
