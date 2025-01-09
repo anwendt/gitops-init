@@ -65,6 +65,7 @@ cd argocd-installer
 Navigate to the `installer/scripts` directory and execute the `install-argocd.sh` script:
 
 ```bash
+export KUBECONFIG="<apth-to-kubeconfig-file>"
 cd installer/scripts
 chmod +x install-argocd.sh
 ./install-argocd.sh
