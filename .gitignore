@@ -1,0 +1,38 @@
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.tar
+*.o
+*.out
+*.class
+
+# Python virtual environment
+venv/
+.env
+
+# Node.js dependencies
+node_modules/
+
+# Docker build files
+*.bak
+.docker/
+docker-compose.override.yml
+
+# Compiled bytecode
+*.pyc
+*.pyo
+__pycache__/
+
+# OS-specific files
+*.swp
+*.swo
+
+# Git-specific files
+.git/
