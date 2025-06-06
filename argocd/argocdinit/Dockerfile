@@ -1,23 +1,23 @@
 # Use specific, pinned Alpine version for consistency and security
-FROM alpine:3.20
+FROM alpine:3.22
 
 LABEL org.opencontainers.image.title="argocd init container"
 LABEL org.opencontainers.image.description="A container image that includes helm-secrets and addtional tools sops, argocd-vault-plugin, kubectl, helm, vals, age, yq, and curl."
-LABEL org.opencontainers.image.version="v0.1.0"
+LABEL org.opencontainers.image.version="v0.1.0-dirty"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.authors="Andres Martin Wendt"
 LABEL org.opencontainers.image.source="https://github.com/anwendt/gitops-init"
 
 USER 0
 
-ARG VERSION_HELM=3.16.4
-ARG VERSION_SOPS=3.9.3
-ARG VERSION_VALS=0.38.0
-ARG VERSION_KUBECTL=1.31.2
+ARG VERSION_HELM=3.18.0
+ARG VERSION_SOPS=3.10.2
+ARG VERSION_VALS=0.41.2
+ARG VERSION_KUBECTL=1.32.5
 ARG VERSION_AGE=1.2.1
 ARG VERSION_VAULT=1.18.1
-ARG VERSION_HELMSECRETS=4.6.2
-ARG VERSION_CURL=8.11.0
+ARG VERSION_HELMSECRETS=4.6.5
+ARG VERSION_CURL=8.14.1
 
 ENV HOME=/home/user/
 
