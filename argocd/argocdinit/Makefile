@@ -2,7 +2,7 @@
 IMAGE_NAME := awendt/argocdinit
 DOCKERFILE := Dockerfile
 GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "latest")
-PLATFORMS := linux/amd64
+PLATFORMS := linux/amd64,linux/arm64
 OUTPUT_TAR := $(GIT_VERSION).tar
 BUILD_CONTEXT := .
 

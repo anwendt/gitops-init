@@ -3,7 +3,7 @@ FROM alpine:3.22
 
 LABEL org.opencontainers.image.title="argocd init container"
 LABEL org.opencontainers.image.description="A container image that includes helm-secrets and addtional tools sops, argocd-vault-plugin, kubectl, helm, vals, age, yq, and curl."
-LABEL org.opencontainers.image.version="v0.1.0-dirty"
+LABEL org.opencontainers.image.version="v0.2.0-dirty"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.authors="Andres Martin Wendt"
 LABEL org.opencontainers.image.source="https://github.com/anwendt/gitops-init"
@@ -39,7 +39,7 @@ RUN if [ "$(uname -m)" == "x86_64" ]; then CURL_ARCH=amd64; GO_ARCH=amd64; else 
     # Download age
     && wget -qO - https://github.com/FiloSottile/age/releases/download/v${VERSION_AGE}/age-v${VERSION_AGE}-linux-${GO_ARCH}.tar.gz | tar xzf - -C /usr/local/bin/ age \
     # Download and install yq
-    && wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 \
+    && wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${GO_ARCH} \
     # Download helm-secrets
     && mkdir -p /opt/custom-tools/helm-plugins/ \
     && wget -qO - https://github.com/jkroepke/helm-secrets/releases/download/v${VERSION_HELMSECRETS}/helm-secrets.tar.gz | tar xzf - -C /opt/custom-tools/helm-plugins/ helm-secrets/scripts helm-secrets/plugin.yaml \
