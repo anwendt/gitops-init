@@ -200,7 +200,7 @@ spec:
         value: "true"
       initContainers:
         - name: download-tools
-          image: awendt/argocdinit:v0.1.0
+          image: awendt/argocdinit:v0.3.0
           command:
             - sh
             - -c
