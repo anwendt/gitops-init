@@ -13,20 +13,41 @@ function check_command() {
     command -v "$1" >/dev/null 2>&1
 }
 
-
-
 # Function to ensure 'age' is installed
 function ensure_age_installed() {
     echo -e "${GREEN}Checking if 'age' is installed...${RESET}"
     if ! check_command "age"; then
         echo -e "${YELLOW}'age' is not installed.${RESET}"
-        read -p "Would you like to install 'age'? (y/n): " INSTALL_AGE
+        read -p "Would you like to install 'age' and 'age-keygen'? (y/n): " INSTALL_AGE
         if [[ "$INSTALL_AGE" == "y" || "$INSTALL_AGE" == "Y" ]]; then
-            echo -e "${GREEN}Installing 'age'...${RESET}"
+            echo -e "${GREEN}Installing 'age' and 'age-keygen'...${RESET}"
             if [[ "$(uname)" == "Linux" ]]; then
-                curl -fsSL https://github.com/FiloSottile/age/releases/latest/download/age-linux-amd64 -o /usr/local/bin/age
-                chmod +x /usr/local/bin/age
+                # Version definieren
+                AGE_VERSION="v1.2.1"
+                AGE_TARBALL="age-${AGE_VERSION}-linux-amd64.tar.gz"
+                AGE_URL="https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/${AGE_TARBALL}"
+
+                # Temporäres Verzeichnis anlegen
+                TMP_DIR=$(mktemp -d)
+                pushd "$TMP_DIR" >/dev/null
+
+                echo -e "${GREEN}Downloading ${AGE_TARBALL}...${RESET}"
+                curl -fsSL -o "${AGE_TARBALL}" "${AGE_URL}"
+
+                echo -e "${GREEN}Extracting ${AGE_TARBALL}...${RESET}"
+                tar -xzf "${AGE_TARBALL}"
+
+                # age & age-keygen installieren
+                echo -e "${GREEN}Installing binaries to /usr/local/bin...${RESET}"
+                sudo mv age/age /usr/local/bin/age
+                sudo mv age/age-keygen /usr/local/bin/age-keygen
+                sudo chmod +x /usr/local/bin/age /usr/local/bin/age-keygen
+
+                popd >/dev/null
+                rm -rf "$TMP_DIR"
+
             elif [[ "$(uname)" == "Darwin" ]]; then
+                # macOS via Homebrew
                 brew install age
             else
                 echo -e "${RED}Unknown operating system. Please install 'age' manually.${RESET}"
