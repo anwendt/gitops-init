@@ -56,8 +56,8 @@ Please refer to the `LICENSES` directory in this repository for the full license
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/<your-repo>/argocd-installer.git
-cd argocd-installer
+git clone https://github.com/anwendt/gitops-init.git
+cd gitops-init
 ```
 
 ### 2. Run the Installer Script
