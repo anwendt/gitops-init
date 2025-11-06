@@ -351,6 +351,51 @@ function deploy_age_key_secret() {
 }
 
 
+# Function to wait for ArgoCD CRDs to be ready
+function wait_for_argocd_crds() {
+    echo -e "${GREEN}Waiting for ArgoCD CRDs to be registered...${RESET}"
+    local timeout=300  # 5 minutes max wait
+    local interval=5
+    local elapsed=0
+
+    # Wait for Application CRD
+    while ! kubectl get crd applications.argoproj.io >/dev/null 2>&1; do
+        if (( elapsed >= timeout )); then
+            echo -e "${RED}Timed out waiting for ArgoCD CRDs after ${timeout}s.${RESET}"
+            exit 1
+        fi
+        echo -e "${YELLOW}ArgoCD CRDs not yet ready... waiting ${interval}s.${RESET}"
+        sleep $interval
+        ((elapsed+=interval))
+    done
+
+    echo -e "${GREEN}ArgoCD CRDs detected successfully! (${elapsed}s)${RESET}"
+}
+
+# Wait for ArgoCD API server to become ready
+function wait_for_argocd_ready() {
+    echo -e "${GREEN}Waiting for ArgoCD server deployment to become ready...${RESET}"
+    local timeout=300
+    local interval=5
+    local elapsed=0
+    while true; do
+        ready_replicas=$(kubectl -n argocd get deploy argocd-server -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+        if [[ "$ready_replicas" == "1" || "$ready_replicas" == "2" ]]; then
+            echo -e "${GREEN}ArgoCD server is ready (${elapsed}s).${RESET}"
+            break
+        fi
+        if (( elapsed >= timeout )); then
+            echo -e "${RED}Timed out waiting for ArgoCD server to be ready after ${timeout}s.${RESET}"
+            exit 1
+        fi
+        echo -e "${YELLOW}Waiting for ArgoCD server... (${elapsed}s)${RESET}"
+        sleep $interval
+        ((elapsed+=interval))
+    done
+}
+
+
+
 # Function to deploy the repository secret
 function deploy_bootstrap_application() {
     echo -e "${GREEN}Deploying argocd bootstrap application...${RESET}"
@@ -419,6 +464,9 @@ get_helm_chart_version
 
 # Deploy ArgoCD
 deploy_argocd
+wait_for_argocd_crds
+wait_for_argocd_ready
+
 
 # Deploy argocd bottstrap application
 deploy_bootstrap_application
