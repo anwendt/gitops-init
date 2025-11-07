@@ -66,11 +66,21 @@ jobs:
 
       - name: Run goss checks
         run: |
-          curl -fsSL https://goss.rocks/install | sh -s -- -b /tmp/goss/bin
-          export PATH=/tmp/goss/bin:$PATH
-          # newer goss versions take the filename as a positional argument
-          # Use absolute path to avoid cwd/relative path issues inside dgoss wrappers
-          goss validate "$(pwd)/argocd/argocdinit/test/goss.yaml" || (echo "goss checks failed"; docker logs test-container || true; exit 1)
+          # Copy the goss file into the running test container and run goss inside it.
+          docker cp argocd/argocdinit/test/goss.yaml test-container:/tmp/goss.yaml
+
+          # Install goss inside the container if it's not already present. We keep this
+          # idempotent and tolerant (apk may not exist in all images) so the step won't
+          # fail unexpectedly during install attempts.
+          docker exec test-container sh -c '
+            if [ ! -x /usr/local/bin/goss ]; then
+              apk add --no-cache curl || true
+              curl -sL https://github.com/goss-org/goss/releases/download/v0.4.9/goss-linux-amd64 -o /usr/local/bin/goss && chmod +x /usr/local/bin/goss || true
+            fi
+          '
+
+          # Run goss inside the container against the copied file.
+          docker exec test-container /usr/local/bin/goss validate /tmp/goss.yaml || (echo "goss checks failed"; docker logs test-container || true; exit 1)
 
       - name: Stop test container
         if: always()
