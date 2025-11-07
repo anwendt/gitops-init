@@ -35,6 +35,12 @@ jobs:
           version=$(git describe --tags --always --dirty 2>/dev/null || echo "latest")
           echo "version=$version" >> $GITHUB_OUTPUT
 
+      - name: Get git version
+        id: ver
+        run: |
+          version=$(git describe --tags --always --dirty 2>/dev/null || echo "latest")
+          echo "version=$version" >> $GITHUB_OUTPUT
+
       - name: Build image (Makefile)
         run: |
           # Build via Makefile (creates builder and OCI tar)
