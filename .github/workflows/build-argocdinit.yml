@@ -54,7 +54,8 @@ jobs:
           git clone https://github.com/bats-core/bats-core.git /tmp/bats-core
           /tmp/bats-core/install.sh /tmp/bats
           export PATH=/tmp/bats/bin:$PATH
-          export IMAGE=awendt/argocdinit:${{ steps.ver.outputs.version }}-test
+          # The Makefile builds a single-platform test image tagged with -test-linux-amd64
+          export IMAGE=awendt/argocdinit:${{ steps.ver.outputs.version }}-test-linux-amd64
           bats argocd/argocdinit/test/tests.bats
 
       - name: Start test container for goss
