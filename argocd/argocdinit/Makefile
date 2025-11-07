@@ -57,19 +57,26 @@ build-push: patch-dockerfile builder
 version:
 	@echo "Git Version: $(GIT_VERSION)"
 
-# Generate SBOM using Anchore Syft against the produced OCI archive
+# Generate SBOM using Anchore Syft against a single-platform image
+# NOTE: Syft has issues parsing OCI index/manifest lists (multi-arch tars). Build a linux/amd64 image and load it locally,
+# then run syft against the local docker image to produce CycloneDX and SPDX SBOMs.
 .PHONY: sbom
-sbom: build
-	@echo "Generating CycloneDX SBOM for $(IMAGE_NAME):$(GIT_VERSION) -> $(GIT_VERSION)-sbom-cyclonedx.json"
-	@docker run --rm -v $(CURDIR):/work -w /work anchore/syft:v0.84.0 packages oci-archive:/work/$(OUTPUT_TAR) -o cyclonedx-json > $(GIT_VERSION)-sbom-cyclonedx.json || (echo "syft cyclonedx failed"; exit 1)
-	@echo "Generating SPDX SBOM for $(IMAGE_NAME):$(GIT_VERSION) -> $(GIT_VERSION)-sbom-spdx.json"
-	@docker run --rm -v $(CURDIR):/work -w /work anchore/syft:v0.84.0 packages oci-archive:/work/$(OUTPUT_TAR) -o spdx-json > $(GIT_VERSION)-sbom-spdx.json || (echo "syft spdx failed"; exit 1)
+sbom: builder
+	@echo "Building single-platform image (linux/amd64) for SBOM generation"
+	@docker buildx build --platform linux/amd64 -t $(IMAGE_NAME):$(GIT_VERSION)-sbom --load $(BUILD_CONTEXT)
+	@echo "Checking Docker daemon availability..."
+	@docker info >/dev/null 2>&1 || (echo "Docker daemon not running or not reachable at /var/run/docker.sock. Start Docker Desktop or ensure docker daemon is available."; exit 1)
+	@echo "Generating CycloneDX SBOM for $(IMAGE_NAME):$(GIT_VERSION)-sbom -> $(GIT_VERSION)-sbom-cyclonedx.json"
+	@docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $(CURDIR):/work -w /work anchore/syft:v0.84.0 packages docker:$(IMAGE_NAME):$(GIT_VERSION)-sbom -o cyclonedx-json > $(GIT_VERSION)-sbom-cyclonedx.json || (echo "syft cyclonedx failed"; exit 1)
+	@echo "Generating SPDX SBOM for $(IMAGE_NAME):$(GIT_VERSION)-sbom -> $(GIT_VERSION)-sbom-spdx.json"
+	@docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $(CURDIR):/work -w /work anchore/syft:v0.84.0 packages docker:$(IMAGE_NAME):$(GIT_VERSION)-sbom -o spdx-json > $(GIT_VERSION)-sbom-spdx.json || (echo "syft spdx failed"; exit 1)
 
-# Run vulnerability scan using Anchore Grype against the produced OCI archive
+# Run vulnerability scan using Anchore Grype against the single-platform image
+# Use the same single-platform image built for SBOM generation to avoid OCI index parsing issues.
 .PHONY: security-scan
-security-scan: build
-	@echo "Running vulnerability scan for $(IMAGE_NAME):$(GIT_VERSION) -> $(GIT_VERSION)-vuln.json"
-	@docker run --rm -v $(CURDIR):/work -w /work anchore/grype:0.72.0 grype oci-archive:/work/$(OUTPUT_TAR) -o json > $(GIT_VERSION)-vuln.json || (echo "grype failed with exit code $$?"; true)
+security-scan: sbom
+	@echo "Running vulnerability scan for $(IMAGE_NAME):$(GIT_VERSION)-sbom -> $(GIT_VERSION)-vuln.json"
+	@docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $(CURDIR):/work -w /work anchore/grype:latest docker:$(IMAGE_NAME):$(GIT_VERSION)-sbom -o json > $(GIT_VERSION)-vuln.json || (echo "grype failed with exit code $$?"; true)
 
 # CI target: build, then create SBOM (and optionally run security-scan)
 .PHONY: ci
