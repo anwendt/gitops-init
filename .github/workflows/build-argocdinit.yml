@@ -5,11 +5,7 @@ on:
     paths:
       - 'argocd/argocdinit/**'
       - 'argocd/argocdinit/Dockerfile'
-  push:
-    branches:
-      - main
-    paths:
-      - 'argocd/argocdinit/**'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -39,48 +35,42 @@ jobs:
           version=$(git describe --tags --always --dirty 2>/dev/null || echo "latest")
           echo "version=$version" >> $GITHUB_OUTPUT
 
-      - name: Log in to GHCR (for build cache, optional)
-        if: secrets.GHCR_TOKEN
+      - name: Get git version
+        id: ver
         run: |
-          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+          version=$(git describe --tags --always --dirty 2>/dev/null || echo "latest")
+          echo "version=$version" >> $GITHUB_OUTPUT
 
       - name: Build image (Makefile)
         run: |
-          # If GHCR cache token is available, set CACHE_REGISTRY so Makefile uses buildx registry cache
-          if [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
-            export CACHE_REGISTRY=ghcr.io/${{ github.repository_owner }}/argocdinit-cache:latest
-            echo "Using CACHE_REGISTRY=$CACHE_REGISTRY"
-          fi
-          # use Makefile target; it will create a buildx builder if needed and produce an OCI tar
+          # Build via Makefile (creates builder and OCI tar)
           make -C argocd/argocdinit all
 
       - name: Generate SBOM (Makefile)
         run: |
-          # Generate CycloneDX + SPDX SBOM using the Makefile target (uses Anchore Syft container)
           make -C argocd/argocdinit sbom || true
 
-      - name: Run container smoke tests (Makefile)
+      - name: Run smoke tests (Makefile)
         run: |
-          # Run smoke tests that load an amd64 image locally and exercise basic binaries
-          make -C argocd/argocdinit test || (echo "tests failed"; exit 1)
+          make -C argocd/argocdinit test || (echo "smoke tests failed"; exit 1)
 
-      - name: Run structured BATS tests
+      - name: Run BATS tests
         run: |
-          # Install bats-core locally and run BATS tests that call 'docker run' against the loaded image
           git clone https://github.com/bats-core/bats-core.git /tmp/bats-core
-          /tmp/bats-core/install.sh /usr/local
+          /tmp/bats-core/install.sh /tmp/bats
+          export PATH=/tmp/bats/bin:$PATH
           export IMAGE=awendt/argocdinit:${{ steps.ver.outputs.version }}-test
           bats argocd/argocdinit/test/tests.bats
 
-      - name: Start test container for Goss
+      - name: Start test container for goss
         run: |
           export IMAGE=awendt/argocdinit:${{ steps.ver.outputs.version }}-test
           docker run -d --name test-container $IMAGE sleep infinity
 
-      - name: Install goss and run goss checks
+      - name: Run goss checks
         run: |
-          # install goss via official install script
-          curl -fsSL https://goss.rocks/install | sh -s -- -b /usr/local/bin
+          curl -fsSL https://goss.rocks/install | sh -s -- -b /tmp/goss/bin
+          export PATH=/tmp/goss/bin:$PATH
           goss validate -g argocd/argocdinit/test/goss.yaml || (echo "goss checks failed"; docker logs test-container || true; exit 1)
 
       - name: Stop test container
@@ -97,42 +87,39 @@ jobs:
             argocd/argocdinit/${{ steps.ver.outputs.version }}-sbom-spdx.json
             argocd/argocdinit/${{ steps.ver.outputs.version }}-vuln.json
 
-      - name: Upload built OCI tar as artifact
+      - name: Upload built OCI tar
         uses: actions/upload-artifact@v4
         with:
           name: argocdinit-image-${{ steps.ver.outputs.version }}
           path: argocd/argocdinit/${{ steps.ver.outputs.version }}.tar
 
   push-image:
-    name: Push image to registry (only on main)
+    name: Push image to registries (only on main)
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Push to Docker Hub (optional)
-        if: secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Push image to Docker Hub (Makefile)
-        if: secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
-          make -C argocd/argocdinit build-push
+          if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ] && [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+            make -C argocd/argocdinit build-push
+          else
+            echo "DockerHub credentials not set; skipping Docker Hub push"
+          fi
 
-      - name: Log in to GHCR (optional)
-        if: secrets.GHCR_OWNER && secrets.GHCR_TOKEN
+      - name: Push to GHCR (optional)
         run: |
-          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_OWNER }} --password-stdin
+          if [ -n "${{ secrets.GHCR_OWNER }}" ] && [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_OWNER }} --password-stdin
+            export GHCR_OWNER=${{ secrets.GHCR_OWNER }}
+            make -C argocd/argocdinit push-ghcr
+          else
+            echo "GHCR credentials not set; skipping GHCR push"
+          fi
 
-      - name: Push image to GHCR (Makefile)
-        if: secrets.GHCR_OWNER && secrets.GHCR_TOKEN
-        run: |
-          export GHCR_OWNER=${{ secrets.GHCR_OWNER }}
-          make -C argocd/argocdinit push-ghcr
+

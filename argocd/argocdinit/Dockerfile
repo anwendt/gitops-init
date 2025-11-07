@@ -37,8 +37,8 @@ RUN if [ "$(uname -m)" == "x86_64" ]; then CURL_ARCH=amd64; GO_ARCH=amd64; else 
     && curl -fSL --retry 3 https://get.helm.sh/helm-v${VERSION_HELM}-linux-${GO_ARCH}.tar.gz | tar xzvf - -C /usr/local/bin/ --strip-components 1 "linux-${GO_ARCH}/helm" \
     # Download vals
     && curl -fSL --retry 3 https://github.com/variantdev/vals/releases/download/v${VERSION_VALS}/vals_${VERSION_VALS}_linux_${GO_ARCH}.tar.gz | tar xzf - -C /usr/local/bin/ vals \
-    # Download age
-    && curl -fSL --retry 3 https://github.com/FiloSottile/age/releases/download/v${VERSION_AGE}/age-v${VERSION_AGE}-linux-${GO_ARCH}.tar.gz | tar xzf - -C /usr/local/bin/ age \
+    # Download age (strip top-level directory so binaries land directly in /usr/local/bin)
+    && curl -fSL --retry 3 https://github.com/FiloSottile/age/releases/download/v${VERSION_AGE}/age-v${VERSION_AGE}-linux-${GO_ARCH}.tar.gz | tar xzf - -C /usr/local/bin --strip-components=1 \
     # Download and install yq
     && curl -fSL --retry 3 -o /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v${VERSION_YQ}/yq_linux_${GO_ARCH} \
     # Download helm-secrets
