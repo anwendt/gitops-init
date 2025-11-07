@@ -60,7 +60,8 @@ jobs:
 
       - name: Start test container for goss
         run: |
-          export IMAGE=awendt/argocdinit:${{ steps.ver.outputs.version }}-test
+          # Use the same platform-suffixed test image created by make test
+          export IMAGE=awendt/argocdinit:${{ steps.ver.outputs.version }}-test-linux-amd64
           docker run -d --name test-container $IMAGE sleep infinity
 
       - name: Run goss checks
