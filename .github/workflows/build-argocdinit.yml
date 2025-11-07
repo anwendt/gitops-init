@@ -64,6 +64,14 @@ jobs:
           # Run smoke tests that load an amd64 image locally and exercise basic binaries
           make -C argocd/argocdinit test || (echo "tests failed"; exit 1)
 
+      - name: Run structured BATS tests
+        run: |
+          # Install bats-core locally and run BATS tests that call 'docker run' against the loaded image
+          git clone https://github.com/bats-core/bats-core.git /tmp/bats-core
+          /tmp/bats-core/install.sh /usr/local
+          export IMAGE=awendt/argocdinit:${{ steps.ver.outputs.version }}-test
+          bats argocd/argocdinit/test/tests.bats
+
       - name: Upload SBOM & vuln artifacts
         uses: actions/upload-artifact@v4
         with:
