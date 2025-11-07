@@ -68,7 +68,8 @@ jobs:
         run: |
           curl -fsSL https://goss.rocks/install | sh -s -- -b /tmp/goss/bin
           export PATH=/tmp/goss/bin:$PATH
-          goss validate -g argocd/argocdinit/test/goss.yaml || (echo "goss checks failed"; docker logs test-container || true; exit 1)
+          # newer goss versions take the filename as a positional argument
+          goss validate argocd/argocdinit/test/goss.yaml || (echo "goss checks failed"; docker logs test-container || true; exit 1)
 
       - name: Stop test container
         if: always()
