@@ -9,6 +9,13 @@ BUILD_CONTEXT := .
 # Docker Buildx target
 BUILDER := multiarch-builder
 
+# Optional build cache registry (e.g. ghcr.io/${OWNER}/argocdinit-cache:latest)
+ifndef CACHE_REGISTRY
+	BUILD_CACHE_ARGS :=
+else
+	BUILD_CACHE_ARGS := --cache-from=type=registry,ref=$(CACHE_REGISTRY) --cache-to=type=registry,ref=$(CACHE_REGISTRY),mode=max
+endif
+
 # Default target
 .PHONY: all
 all: patch-dockerfile build
@@ -33,17 +40,17 @@ patch-dockerfile:
 .PHONY: build
 build: builder
 	mkdir -p $(dir $(OUTPUT_TAR)) # Ensure the output directory exists
-	docker buildx build --platform $(PLATFORMS) -t $(IMAGE_NAME):$(GIT_VERSION) --output type=oci,dest=$(OUTPUT_TAR) $(BUILD_CONTEXT)
+	docker buildx build $(BUILD_CACHE_ARGS) --platform $(PLATFORMS) -t $(IMAGE_NAME):$(GIT_VERSION) --output type=oci,dest=$(OUTPUT_TAR) $(BUILD_CONTEXT)
 
 # Build the image for multiple platforms and push to Docker Hub
 .PHONY: push
 push: builder
-	docker buildx build --platform $(PLATFORMS) -t $(IMAGE_NAME):$(GIT_VERSION) --push $(BUILD_CONTEXT)
+	docker buildx build $(BUILD_CACHE_ARGS) --platform $(PLATFORMS) -t $(IMAGE_NAME):$(GIT_VERSION) --push $(BUILD_CONTEXT)
 
 # Build and push the image in one step
 .PHONY: build-push
 build-push: patch-dockerfile builder
-	docker buildx build --platform $(PLATFORMS) -t $(IMAGE_NAME):$(GIT_VERSION) --push $(BUILD_CONTEXT)
+	docker buildx build $(BUILD_CACHE_ARGS) --platform $(PLATFORMS) -t $(IMAGE_NAME):$(GIT_VERSION) --push $(BUILD_CONTEXT)
 
 # Print the Git version (for debugging)
 .PHONY: version
@@ -53,8 +60,10 @@ version:
 # Generate SBOM using Anchore Syft against the produced OCI archive
 .PHONY: sbom
 sbom: build
-	@echo "Generating SBOM for $(IMAGE_NAME):$(GIT_VERSION) -> $(GIT_VERSION)-sbom.json"
-	@docker run --rm -v $(CURDIR):/work -w /work anchore/syft:v0.84.0 packages oci-archive:/work/$(OUTPUT_TAR) -o cyclonedx-json > $(GIT_VERSION)-sbom.json || (echo "syft failed"; exit 1)
+	@echo "Generating CycloneDX SBOM for $(IMAGE_NAME):$(GIT_VERSION) -> $(GIT_VERSION)-sbom-cyclonedx.json"
+	@docker run --rm -v $(CURDIR):/work -w /work anchore/syft:v0.84.0 packages oci-archive:/work/$(OUTPUT_TAR) -o cyclonedx-json > $(GIT_VERSION)-sbom-cyclonedx.json || (echo "syft cyclonedx failed"; exit 1)
+	@echo "Generating SPDX SBOM for $(IMAGE_NAME):$(GIT_VERSION) -> $(GIT_VERSION)-sbom-spdx.json"
+	@docker run --rm -v $(CURDIR):/work -w /work anchore/syft:v0.84.0 packages oci-archive:/work/$(OUTPUT_TAR) -o spdx-json > $(GIT_VERSION)-sbom-spdx.json || (echo "syft spdx failed"; exit 1)
 
 # Run vulnerability scan using Anchore Grype against the produced OCI archive
 .PHONY: security-scan
