@@ -81,6 +81,12 @@ ci: all sbom
 ci-local: all sbom security-scan
 	@echo "ci-local completed: build, sbom and security-scan finished."
 
+.PHONY: test
+test: builder
+	@echo "Building image for local test and loading into docker (amd64)..."
+	@docker buildx build $(BUILD_CACHE_ARGS) --platform linux/amd64 -t $(IMAGE_NAME):$(GIT_VERSION)-test --load $(BUILD_CONTEXT)
+	@./test/run-tests.sh $(IMAGE_NAME):$(GIT_VERSION)-test
+
 # Login to GitHub Container Registry (GHCR)
 .PHONY: login-ghcr
 login-ghcr:

@@ -39,22 +39,38 @@ jobs:
           version=$(git describe --tags --always --dirty 2>/dev/null || echo "latest")
           echo "version=$version" >> $GITHUB_OUTPUT
 
+      - name: Log in to GHCR (for build cache, optional)
+        if: secrets.GHCR_TOKEN
+        run: |
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+
       - name: Build image (Makefile)
         run: |
+          # If GHCR cache token is available, set CACHE_REGISTRY so Makefile uses buildx registry cache
+          if [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
+            export CACHE_REGISTRY=ghcr.io/${{ github.repository_owner }}/argocdinit-cache:latest
+            echo "Using CACHE_REGISTRY=$CACHE_REGISTRY"
+          fi
           # use Makefile target; it will create a buildx builder if needed and produce an OCI tar
           make -C argocd/argocdinit all
 
       - name: Generate SBOM (Makefile)
         run: |
-          # Generate CycloneDX SBOM using the Makefile target (uses Anchore Syft container)
+          # Generate CycloneDX + SPDX SBOM using the Makefile target (uses Anchore Syft container)
           make -C argocd/argocdinit sbom || true
 
-      - name: Upload SBOM artifact
+      - name: Run container smoke tests (Makefile)
+        run: |
+          # Run smoke tests that load an amd64 image locally and exercise basic binaries
+          make -C argocd/argocdinit test || (echo "tests failed"; exit 1)
+
+      - name: Upload SBOM & vuln artifacts
         uses: actions/upload-artifact@v4
         with:
           name: argocdinit-sbom-${{ steps.ver.outputs.version }}
           path: |
-            argocd/argocdinit/${{ steps.ver.outputs.version }}-sbom.json
+            argocd/argocdinit/${{ steps.ver.outputs.version }}-sbom-cyclonedx.json
+            argocd/argocdinit/${{ steps.ver.outputs.version }}-sbom-spdx.json
             argocd/argocdinit/${{ steps.ver.outputs.version }}-vuln.json
 
       - name: Upload built OCI tar as artifact
