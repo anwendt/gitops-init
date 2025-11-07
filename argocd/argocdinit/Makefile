@@ -50,6 +50,23 @@ build-push: patch-dockerfile builder
 version:
 	@echo "Git Version: $(GIT_VERSION)"
 
+# Generate SBOM using Anchore Syft against the produced OCI archive
+.PHONY: sbom
+sbom: build
+	@echo "Generating SBOM for $(IMAGE_NAME):$(GIT_VERSION) -> $(GIT_VERSION)-sbom.json"
+	@docker run --rm -v $(CURDIR):/work -w /work anchore/syft:v0.84.0 packages oci-archive:/work/$(OUTPUT_TAR) -o cyclonedx-json > $(GIT_VERSION)-sbom.json || (echo "syft failed"; exit 1)
+
+# Run vulnerability scan using Anchore Grype against the produced OCI archive
+.PHONY: security-scan
+security-scan: build
+	@echo "Running vulnerability scan for $(IMAGE_NAME):$(GIT_VERSION) -> $(GIT_VERSION)-vuln.json"
+	@docker run --rm -v $(CURDIR):/work -w /work anchore/grype:0.72.0 grype oci-archive:/work/$(OUTPUT_TAR) -o json > $(GIT_VERSION)-vuln.json || (echo "grype failed with exit code $$?"; true)
+
+# CI target: build, then create SBOM (and optionally run security-scan)
+.PHONY: ci
+ci: all sbom
+	@echo "CI targets completed: image built and SBOM generated."
+
 # Clean up the builder (optional)
 .PHONY: clean
 clean:
