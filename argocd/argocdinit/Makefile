@@ -83,12 +83,13 @@ ci-local: all sbom security-scan
 
 .PHONY: test
 test: builder
-	@PLATFORM=${PLATFORM:=linux/amd64}; \
+	@# PLATFORM may be set externally (e.g. PLATFORM=linux/arm64). Default to amd64
+	@PLATFORM=$${PLATFORM:-linux/amd64}; \
 	SHORT=$$(echo $$PLATFORM | tr "/" "-"); \
 	IMAGE_TAG=$(IMAGE_NAME):$(GIT_VERSION)-test-$$SHORT; \
-	@echo "Building image for local test and loading into docker ($$PLATFORM)..."; \
+	echo "Building image for local test and loading into docker ($$PLATFORM)..."; \
 	docker buildx build $(BUILD_CACHE_ARGS) --platform $$PLATFORM -t $$IMAGE_TAG --load $(BUILD_CONTEXT); \
-	@./test/run-tests.sh $$IMAGE_TAG
+	./test/run-tests.sh $$IMAGE_TAG
 
 # Login to GitHub Container Registry (GHCR)
 .PHONY: login-ghcr
