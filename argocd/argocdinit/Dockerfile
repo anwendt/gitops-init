@@ -10,7 +10,7 @@ LABEL org.opencontainers.image.source="https://github.com/anwendt/gitops-init"
 
 USER 0
 
-ARG VERSION_HELM=3.19.0
+ARG VERSION_HELM=3.18.0
 ARG VERSION_SOPS=3.10.2
 ARG VERSION_VALS=0.41.2
 ARG VERSION_KUBECTL=1.34.1
