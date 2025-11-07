@@ -40,7 +40,7 @@ RUN if [ "$(uname -m)" == "x86_64" ]; then CURL_ARCH=amd64; GO_ARCH=amd64; else 
     # Download age
     && curl -fSL --retry 3 https://github.com/FiloSottile/age/releases/download/v${VERSION_AGE}/age-v${VERSION_AGE}-linux-${GO_ARCH}.tar.gz | tar xzf - -C /usr/local/bin/ age \
     # Download and install yq
-    && curl -fSL --retry 3 -o /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/${VERSION_YQ}/yq_linux_${GO_ARCH} \
+    && curl -fSL --retry 3 -o /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v${VERSION_YQ}/yq_linux_${GO_ARCH} \
     # Download helm-secrets
     && mkdir -p /opt/custom-tools/helm-plugins/ \
     && wget -qO - https://github.com/jkroepke/helm-secrets/releases/download/v${VERSION_HELMSECRETS}/helm-secrets.tar.gz | tar xzf - -C /opt/custom-tools/helm-plugins/ helm-secrets/scripts helm-secrets/plugin.yaml \
