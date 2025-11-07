@@ -37,8 +37,9 @@ jobs:
 
       - name: Build image (Makefile)
         run: |
-          # Build via Makefile (creates builder and OCI tar)
-          make -C argocd/argocdinit all
+          # Build via Makefile and create a test image (single-platform) for downstream tests
+          # `make test` builds and --load a linux/amd64 image tagged with -test-linux-amd64
+          make -C argocd/argocdinit test
 
       - name: Generate SBOM (Makefile)
         run: |
