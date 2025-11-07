@@ -67,6 +67,29 @@ security-scan: build
 ci: all sbom
 	@echo "CI targets completed: image built and SBOM generated."
 
+# Local CI runner: build, generate SBOM and run security scan (for local testing)
+.PHONY: ci-local
+ci-local: all sbom security-scan
+	@echo "ci-local completed: build, sbom and security-scan finished."
+
+# Login to GitHub Container Registry (GHCR)
+.PHONY: login-ghcr
+login-ghcr:
+	@if [ -z "$(GHCR_OWNER)" ]; then \
+		echo "GHCR_OWNER is not set. Export GHCR_OWNER and GHCR_TOKEN before running login-ghcr."; exit 1; \
+	fi
+	@echo "Logging in to ghcr.io as $(GHCR_OWNER)"
+	@echo $(GHCR_TOKEN) | docker login ghcr.io -u $(GHCR_OWNER) --password-stdin
+
+# Push image to GitHub Container Registry (requires GHCR_OWNER & GHCR_TOKEN or prior login)
+.PHONY: push-ghcr
+push-ghcr: builder
+	@echo "Pushing image to GHCR: ghcr.io/$(GHCR_OWNER)/argocdinit:$(GIT_VERSION)"
+	@if [ -z "$(GHCR_OWNER)" ]; then \
+		echo "GHCR_OWNER not set. Export GHCR_OWNER and GHCR_TOKEN or run make login-ghcr."; exit 1; \
+	fi
+	@docker buildx build --platform $(PLATFORMS) -t ghcr.io/$(GHCR_OWNER)/argocdinit:$(GIT_VERSION) --push $(BUILD_CONTEXT)
+
 # Clean up the builder (optional)
 .PHONY: clean
 clean:
