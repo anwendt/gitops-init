@@ -1,0 +1,23 @@
+# Goss checks that execute commands inside the running test-container via docker exec
+cmds:
+  sops_exists:
+    exit-status: 0
+    command: docker exec test-container command -v sops
+  kubectl_exists:
+    exit-status: 0
+    command: docker exec test-container command -v kubectl
+  helm_exists:
+    exit-status: 0
+    command: docker exec test-container command -v helm
+  yq_exists:
+    exit-status: 0
+    command: docker exec test-container command -v yq
+  vals_exists:
+    exit-status: 0
+    command: docker exec test-container command -v vals
+  age_exists:
+    exit-status: 0
+    command: docker exec test-container command -v age
+  helm_plugin_file:
+    exit-status: 0
+    command: docker exec test-container test -f /opt/custom-tools/helm-plugins/helm-secrets/plugin.yaml && echo ok

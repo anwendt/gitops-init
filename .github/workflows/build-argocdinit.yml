@@ -72,6 +72,22 @@ jobs:
           export IMAGE=awendt/argocdinit:${{ steps.ver.outputs.version }}-test
           bats argocd/argocdinit/test/tests.bats
 
+      - name: Start test container for Goss
+        run: |
+          export IMAGE=awendt/argocdinit:${{ steps.ver.outputs.version }}-test
+          docker run -d --name test-container $IMAGE sleep infinity
+
+      - name: Install goss and run goss checks
+        run: |
+          # install goss via official install script
+          curl -fsSL https://goss.rocks/install | sh -s -- -b /usr/local/bin
+          goss validate -g argocd/argocdinit/test/goss.yaml || (echo "goss checks failed"; docker logs test-container || true; exit 1)
+
+      - name: Stop test container
+        if: always()
+        run: |
+          docker rm -f test-container || true
+
       - name: Upload SBOM & vuln artifacts
         uses: actions/upload-artifact@v4
         with:
