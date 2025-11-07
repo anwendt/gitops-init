@@ -1,5 +1,5 @@
 # Use specific, pinned Alpine version for consistency and security
-FROM alpine:3.22
+FROM alpine:3.22.2
 
 LABEL org.opencontainers.image.title="argocd init container"
 LABEL org.opencontainers.image.description="A container image that includes helm-secrets and addtional tools sops, argocd-vault-plugin, kubectl, helm, vals, age, yq, and curl."
@@ -10,14 +10,15 @@ LABEL org.opencontainers.image.source="https://github.com/anwendt/gitops-init"
 
 USER 0
 
-ARG VERSION_HELM=3.18.0
+ARG VERSION_HELM=3.19.0
 ARG VERSION_SOPS=3.10.2
 ARG VERSION_VALS=0.41.2
-ARG VERSION_KUBECTL=1.32.5
+ARG VERSION_KUBECTL=1.34.1
 ARG VERSION_AGE=1.2.1
 ARG VERSION_VAULT=1.18.1
-ARG VERSION_HELMSECRETS=4.6.5
-ARG VERSION_CURL=8.14.1
+ARG VERSION_HELMSECRETS=4.6.11
+ARG VERSION_CURL=8.17.0
+ARG VERSION_YQ=4.48.1
 
 ENV HOME=/home/user/
 
@@ -39,7 +40,7 @@ RUN if [ "$(uname -m)" == "x86_64" ]; then CURL_ARCH=amd64; GO_ARCH=amd64; else 
     # Download age
     && wget -qO - https://github.com/FiloSottile/age/releases/download/v${VERSION_AGE}/age-v${VERSION_AGE}-linux-${GO_ARCH}.tar.gz | tar xzf - -C /usr/local/bin/ age \
     # Download and install yq
-    && wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${GO_ARCH} \
+    && wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/${VERSION_YQ}/yq_linux_${GO_ARCH} \
     # Download helm-secrets
     && mkdir -p /opt/custom-tools/helm-plugins/ \
     && wget -qO - https://github.com/jkroepke/helm-secrets/releases/download/v${VERSION_HELMSECRETS}/helm-secrets.tar.gz | tar xzf - -C /opt/custom-tools/helm-plugins/ helm-secrets/scripts helm-secrets/plugin.yaml \
