@@ -2,6 +2,87 @@
 
 set -e  # Exit on error
 
+# Default behaviour flags (can be overridden by CLI args or env vars)
+NON_INTERACTIVE=false
+AUTO_INSTALL_AGE=false
+GENERATE_AGE_KEY=false
+DRY_RUN=false
+AGE_KEY_PATH_ENV=""
+GIT_URL_ENV=""
+GIT_USER_ENV=""
+GIT_TOKEN_ENV=""
+HTTP_PROXY_ENV=""
+
+function usage() {
+    cat <<EOF
+Usage: $0 [options]
+
+Options:
+  -y, --non-interactive       Run without prompts; required vars must be provided via env or options
+      --auto-install-age      In non-interactive mode, install 'age' automatically if missing
+      --generate-age-key      In non-interactive mode, generate a new age key (key.txt) instead of prompting
+      --age-key-path PATH     Path to existing age key (uses this instead of generating)
+      --git-url URL           Git repository URL (preferably without leading protocol, e.g. 'github.com/org/repo.git')
+      --git-user USER         Git username
+      --git-token TOKEN       Git token/password
+      --http-proxy URL        HTTP_PROXY value to set for repository access
+  -h, --help                  Show this help and exit
+    --dry-run               Do not change anything; print normalized settings and exit
+
+Environment variables (alternate to options):
+  AGE_KEY_PATH, GIT_URL, GIT_USER, GIT_TOKEN, HTTP_PROXY
+
+Notes:
+  - The script accepts Git URLs with or without the leading protocol (https:// or http://).
+    If you provide a URL containing 'https://' the script will automatically strip the protocol
+    and any trailing slash. However, when running in non-interactive mode you must provide
+    a non-empty repository path (for example: 'github.com/org/repo.git').
+
+Examples:
+  # interactive (default)
+  $0
+
+  # non-interactive (generate key, auto-install age)
+  $0 --non-interactive --auto-install-age --generate-age-key --git-url github.com/org/repo.git --git-user myuser --git-token secret
+
+EOF
+}
+
+# Parse CLI args
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    -y|--non-interactive)
+      NON_INTERACTIVE=true; shift ;;
+    --auto-install-age)
+      AUTO_INSTALL_AGE=true; shift ;;
+    --generate-age-key)
+      GENERATE_AGE_KEY=true; shift ;;
+    --age-key-path)
+      AGE_KEY_PATH_ENV="$2"; shift 2 ;;
+    --git-url)
+      GIT_URL_ENV="$2"; shift 2 ;;
+    --git-user)
+      GIT_USER_ENV="$2"; shift 2 ;;
+    --git-token)
+      GIT_TOKEN_ENV="$2"; shift 2 ;;
+    --http-proxy)
+      HTTP_PROXY_ENV="$2"; shift 2 ;;
+    --dry-run)
+      DRY_RUN=true; shift ;;
+    -h|--help)
+      usage; exit 0 ;;
+    *)
+      echo "Unknown option: $1"; usage; exit 1 ;;
+  esac
+done
+
+# Prefer CLI args, then env vars
+AGE_KEY_PATH=${AGE_KEY_PATH_ENV:-${AGE_KEY_PATH:-}}
+GIT_URL=${GIT_URL_ENV:-${GIT_URL:-}}
+GIT_USER=${GIT_USER_ENV:-${GIT_USER:-}}
+GIT_TOKEN=${GIT_TOKEN_ENV:-${GIT_TOKEN:-}}
+HTTP_PROXY=${HTTP_PROXY_ENV:-${HTTP_PROXY:-}}
+
 # Colors for output
 GREEN="\033[0;32m"
 RED="\033[0;31m"
@@ -16,74 +97,107 @@ function check_command() {
 # Function to ensure 'age' is installed
 function ensure_age_installed() {
     echo -e "${GREEN}Checking if 'age' is installed...${RESET}"
-    if ! check_command "age"; then
-        echo -e "${YELLOW}'age' is not installed.${RESET}"
-        read -p "Would you like to install 'age' and 'age-keygen'? (y/n): " INSTALL_AGE
-        if [[ "$INSTALL_AGE" == "y" || "$INSTALL_AGE" == "Y" ]]; then
-            echo -e "${GREEN}Installing 'age' and 'age-keygen'...${RESET}"
-            if [[ "$(uname)" == "Linux" ]]; then
-                # Version definieren
-                AGE_VERSION="v1.2.1"
-                AGE_TARBALL="age-${AGE_VERSION}-linux-amd64.tar.gz"
-                AGE_URL="https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/${AGE_TARBALL}"
-
-                # Temporäres Verzeichnis anlegen
-                TMP_DIR=$(mktemp -d)
-                pushd "$TMP_DIR" >/dev/null
-
-                echo -e "${GREEN}Downloading ${AGE_TARBALL}...${RESET}"
-                curl -fsSL -o "${AGE_TARBALL}" "${AGE_URL}"
-
-                echo -e "${GREEN}Extracting ${AGE_TARBALL}...${RESET}"
-                tar -xzf "${AGE_TARBALL}"
-
-                # age & age-keygen installieren
-                echo -e "${GREEN}Installing binaries to /usr/local/bin...${RESET}"
-                sudo mv age/age /usr/local/bin/age
-                sudo mv age/age-keygen /usr/local/bin/age-keygen
-                sudo chmod +x /usr/local/bin/age /usr/local/bin/age-keygen
-
-                popd >/dev/null
-                rm -rf "$TMP_DIR"
-
-            elif [[ "$(uname)" == "Darwin" ]]; then
-                # macOS via Homebrew
-                brew install age
-            else
-                echo -e "${RED}Unknown operating system. Please install 'age' manually.${RESET}"
-                exit 1
-            fi
-        else
-            echo -e "${RED}'age' is required. Exiting.${RESET}"
-            exit 1
-        fi
+  if ! check_command "age"; then
+    echo -e "${YELLOW}'age' is not installed.${RESET}"
+    if [[ "$NON_INTERACTIVE" == "true" ]]; then
+      if [[ "$AUTO_INSTALL_AGE" == "true" ]]; then
+        echo -e "${GREEN}Non-interactive: installing 'age' and 'age-keygen'...${RESET}"
+      else
+        echo -e "${RED}Non-interactive mode and 'age' missing. Set --auto-install-age or install 'age' manually.${RESET}"
+        exit 1
+      fi
     else
-        echo -e "${GREEN}'age' is already installed.${RESET}"
+      read -p "Would you like to install 'age' and 'age-keygen'? (y/n): " INSTALL_AGE
+      if [[ "$INSTALL_AGE" != "y" && "$INSTALL_AGE" != "Y" ]]; then
+        echo -e "${RED}'age' is required. Exiting.${RESET}"
+        exit 1
+      fi
+      echo -e "${GREEN}Installing 'age' and 'age-keygen'...${RESET}"
     fi
+
+    # Perform installation (either interactive-confirmed or auto)
+    if [[ "$(uname)" == "Linux" ]]; then
+      AGE_VERSION="v1.2.1"
+      AGE_TARBALL="age-${AGE_VERSION}-linux-amd64.tar.gz"
+      AGE_URL="https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/${AGE_TARBALL}"
+
+      TMP_DIR=$(mktemp -d)
+      pushd "$TMP_DIR" >/dev/null
+
+      echo -e "${GREEN}Downloading ${AGE_TARBALL}...${RESET}"
+      curl -fsSL -o "${AGE_TARBALL}" "${AGE_URL}"
+
+      echo -e "${GREEN}Extracting ${AGE_TARBALL}...${RESET}"
+      tar -xzf "${AGE_TARBALL}"
+
+      echo -e "${GREEN}Installing binaries to /usr/local/bin...${RESET}"
+      sudo mv age/age /usr/local/bin/age
+      sudo mv age/age-keygen /usr/local/bin/age-keygen
+      sudo chmod +x /usr/local/bin/age /usr/local/bin/age-keygen
+
+      popd >/dev/null
+      rm -rf "$TMP_DIR"
+
+    elif [[ "$(uname)" == "Darwin" ]]; then
+      brew install age
+    else
+      echo -e "${RED}Unknown operating system. Please install 'age' manually.${RESET}"
+      exit 1
+    fi
+  else
+    echo -e "${GREEN}'age' is already installed.${RESET}"
+  fi
 }
 
 # Function to configure the 'age' key
 function configure_age_key() {
     echo -e "${GREEN}Configuring 'age' key...${RESET}"
-    read -p "Do you want to generate a new 'age' key? (y/n): " NEW_AGE_KEY
-    if [[ "$NEW_AGE_KEY" == "y" || "$NEW_AGE_KEY" == "Y" ]]; then
-        if [[ -f key.txt ]]; then
-            rm key.txt
-            echo -e "${GREEN}Old 'key.txt' deleted.${RESET}"
-        fi
-        echo -e "${GREEN}Generating new 'age' key...${RESET}"
-        age-keygen -o key.txt
-        echo -e "${GREEN}'age' key generated: key.txt${RESET}"
-        export AGE_KEY_PATH=$PWD/key.txt
-    else
-        read -p "Enter the file path to an existing 'age' key: " AGE_KEY_PATH
-        if [[ ! -f "$AGE_KEY_PATH" ]]; then
-            echo -e "${RED}Invalid file path. Exiting.${RESET}"
-            exit 1
-        fi
-        echo -e "${GREEN}Using existing 'age' key: $AGE_KEY_PATH${RESET}"
-        export AGE_KEY_PATH
+  # Non-interactive behaviour: prefer CLI/env-provided AGE_KEY_PATH, or GENERATE_AGE_KEY
+  if [[ "$NON_INTERACTIVE" == "true" ]]; then
+    if [[ -n "${AGE_KEY_PATH}" ]]; then
+      if [[ ! -f "${AGE_KEY_PATH}" ]]; then
+        echo -e "${RED}Provided AGE_KEY_PATH does not exist: ${AGE_KEY_PATH}${RESET}"
+        exit 1
+      fi
+      echo -e "${GREEN}Using provided age key: ${AGE_KEY_PATH}${RESET}"
+      export AGE_KEY_PATH
+      return
     fi
+    if [[ "$GENERATE_AGE_KEY" == "true" ]]; then
+      echo -e "${GREEN}Non-interactive: generating new 'age' key...${RESET}"
+      if [[ -f key.txt ]]; then
+        rm key.txt
+        echo -e "${GREEN}Old 'key.txt' deleted.${RESET}"
+      fi
+      age-keygen -o key.txt
+      echo -e "${GREEN}'age' key generated: key.txt${RESET}"
+      export AGE_KEY_PATH=$PWD/key.txt
+      return
+    fi
+    echo -e "${RED}Non-interactive mode requires either --age-key-path or --generate-age-key.${RESET}"
+    exit 1
+  fi
+
+  # Interactive fallback
+  read -p "Do you want to generate a new 'age' key? (y/n): " NEW_AGE_KEY
+  if [[ "$NEW_AGE_KEY" == "y" || "$NEW_AGE_KEY" == "Y" ]]; then
+    if [[ -f key.txt ]]; then
+      rm key.txt
+      echo -e "${GREEN}Old 'key.txt' deleted.${RESET}"
+    fi
+    echo -e "${GREEN}Generating new 'age' key...${RESET}"
+    age-keygen -o key.txt
+    echo -e "${GREEN}'age' key generated: key.txt${RESET}"
+    export AGE_KEY_PATH=$PWD/key.txt
+  else
+    read -p "Enter the file path to an existing 'age' key: " AGE_KEY_PATH
+    if [[ ! -f "$AGE_KEY_PATH" ]]; then
+      echo -e "${RED}Invalid file path. Exiting.${RESET}"
+      exit 1
+    fi
+    echo -e "${GREEN}Using existing 'age' key: $AGE_KEY_PATH${RESET}"
+    export AGE_KEY_PATH
+  fi
 }
 
 
@@ -99,8 +213,8 @@ function validate_prerequisites() {
 
     # Check if jq is installed
     if ! check_command "jq"; then
-        echo -e "${RED}'jg' is not installed. Please install 'kubectl' and try again.${RESET}"
-        exit 1    
+    echo -e "${RED}'jq' is not installed. Please install 'jq' and try again.${RESET}"
+    exit 1
     fi
 
     # Check if kubectl can connect to a cluster
@@ -118,7 +232,7 @@ function validate_prerequisites() {
     echo -e "${GREEN}'helmcharts.helm.cattle.io' is available in the cluster.${RESET}"
 
     # Ensure 'age' is installed
-    ensure_age_installed
+  ensure_age_installed
 
     echo -e "${GREEN}All prerequisites are met.${RESET}"
 }
@@ -284,30 +398,61 @@ EOF
 # Function to configure Git repository access
 function configure_git_repository() {
     echo -e "${GREEN}Configuring Git repository access...${RESET}"
-    read -p "Enter the Git repository URL https://" GIT_URL
+  # Non-interactive: use provided env/CLI values
+  if [[ "$NON_INTERACTIVE" == "true" ]]; then
+    if [[ -z "$GIT_URL" || -z "$GIT_USER" || -z "$GIT_TOKEN" ]]; then
+      echo -e "${RED}Non-interactive mode requires GIT_URL, GIT_USER and GIT_TOKEN (via args or env).${RESET}"
+      exit 1
+    fi
+    # Normalize: remove leading https:// or http:// if present
+    GIT_URL="${GIT_URL#http://}"
+    GIT_URL="${GIT_URL#https://}"
+    GIT_URL="${GIT_URL%/}"
+    if [[ -z "$GIT_URL" ]]; then
+      echo -e "${RED}Provided GIT_URL is empty after normalization. Provide a valid repository (e.g. 'github.com/org/repo.git').${RESET}"
+      exit 1
+    fi
+    echo -e "${GREEN}Using non-interactive Git settings.${RESET}"
+    if [[ -n "$HTTP_PROXY" ]]; then
+      export HTTP_PROXY="$HTTP_PROXY"
+      echo -e "${GREEN}HTTP Proxy set: $HTTP_PROXY${RESET}"
+    fi
+  else
+    read -p "Enter the Git repository URL (you may include or omit 'https://'): https://" GIT_URL
+
+    # Normalize entered URL: strip protocol if provided and trim trailing slash
+    GIT_URL="${GIT_URL#http://}"
+    GIT_URL="${GIT_URL#https://}"
+    GIT_URL="${GIT_URL%/}"
+    if [[ -z "$GIT_URL" ]]; then
+      echo -e "${RED}No Git repository provided. Exiting.${RESET}"
+      exit 1
+    fi
 
     # Check for HTTP Proxy setting
     echo -e "${GREEN}Checking HTTP Proxy configuration...${RESET}"
     if [[ -z "$HTTP_PROXY" ]]; then
-        read -p "HTTP Proxy is not set. Do you want to set it now? (y/n): " SET_PROXY
-        if [[ "$SET_PROXY" == "y" || "$SET_PROXY" == "Y" ]]; then
-            read -p "Enter the HTTP Proxy URL: " HTTP_PROXY
-            export HTTP_PROXY=$HTTP_PROXY
-            echo -e "${GREEN}HTTP Proxy set: $HTTP_PROXY${RESET}"
-        fi
+      read -p "HTTP Proxy is not set. Do you want to set it now? (y/n): " SET_PROXY
+      if [[ "$SET_PROXY" == "y" || "$SET_PROXY" == "Y" ]]; then
+        read -p "Enter the HTTP Proxy URL: " HTTP_PROXY
+        export HTTP_PROXY=$HTTP_PROXY
+        echo -e "${GREEN}HTTP Proxy set: $HTTP_PROXY${RESET}"
+      fi
     else
-        echo -e "${GREEN}HTTP Proxy is already set: $HTTP_PROXY${RESET}"
+      echo -e "${GREEN}HTTP Proxy is already set: $HTTP_PROXY${RESET}"
     fi
 
     # Ask for Git username and token
     read -p "Enter your Git username: " GIT_USER
     read -s -p "Enter your Git token: " GIT_TOKEN
     echo
+  fi
 
-    # Test Git credentials
-    test_git_clone "$GIT_URL" "$GIT_USER" "$GIT_TOKEN"
+  # Test Git credentials (will prompt to reconfigure if access fails)
+  test_git_clone "$GIT_URL" "$GIT_USER" "$GIT_TOKEN"
 
-    export GIT_URL GIT_USER GIT_TOKEN HTTP_PROXY
+  # Export normalized URL and credentials
+  export GIT_URL GIT_USER GIT_TOKEN HTTP_PROXY
 }
 
 # Function to deploy the repository secret
@@ -440,6 +585,30 @@ EOF
 
 # Main script execution
 echo -e "${GREEN}Starting ArgoCD installation script...${RESET}"
+
+# If dry-run requested, print normalized/derived settings and exit early
+if [[ "$DRY_RUN" == "true" ]]; then
+  echo -e "${YELLOW}DRY RUN: reporting configuration and normalized values (no changes will be made)${RESET}"
+  echo -e "NON_INTERACTIVE=${NON_INTERACTIVE}"
+  echo -e "AUTO_INSTALL_AGE=${AUTO_INSTALL_AGE}"
+  echo -e "GENERATE_AGE_KEY=${GENERATE_AGE_KEY}"
+  echo -e "AGE_KEY_PATH (env)=${AGE_KEY_PATH:-<unset>}"
+  echo -e "GIT_URL (raw)=${GIT_URL:-<unset>}"
+  # show normalized git url (strip protocol and trailing slash)
+  if [[ -n "${GIT_URL}" ]]; then
+    normalized_url="${GIT_URL#http://}"
+    normalized_url="${normalized_url#https://}"
+    normalized_url="${normalized_url%/}"
+  else
+    normalized_url="<unset>"
+  fi
+  echo -e "GIT_URL (normalized)=${normalized_url}"
+  echo -e "GIT_USER=${GIT_USER:-<unset>}"
+  echo -e "GIT_TOKEN=${GIT_TOKEN:+<set>}"
+  echo -e "HTTP_PROXY=${HTTP_PROXY:-<unset>}"
+  echo -e "${GREEN}DRY RUN complete.${RESET}"
+  exit 0
+fi
 
 # Validate prerequisites
 validate_prerequisites
