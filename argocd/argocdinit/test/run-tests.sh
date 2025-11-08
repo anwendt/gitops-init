@@ -30,7 +30,13 @@ if [ "$MISSING" -ne 0 ]; then
 fi
 
 echo "Basic runtime checks: invoking --version where available"
-docker run --rm "$IMAGE" sh -c "sops --version || true; kubectl version --client --short || true; helm version --short || true; yq --version || true"
+# kubectl in newer versions does not support --short; use --client and trim
+docker run --rm "$IMAGE" sh -c '
+  sops --version || true;
+  (kubectl version --client 2>/dev/null | sed -n "s/^Client Version: //p" || true);
+  helm version --short || true;
+  yq --version || true
+'
 
 echo "All smoke tests passed."
 

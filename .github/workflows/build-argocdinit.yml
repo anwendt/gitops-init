@@ -37,17 +37,18 @@ jobs:
 
       - name: Build image (Makefile)
         run: |
-          # Build via Makefile and create a test image (single-platform) for downstream tests
-          # `make test` builds and --load a linux/amd64 image tagged with -test-linux-amd64
-          make -C argocd/argocdinit test
+          # Multi-Arch Build exported as OCI tar (produces <version>.tar)
+          make -C argocd/argocdinit build
 
-      - name: Generate SBOM (Makefile)
+      - name: Single-platform test build & smoke tests
         run: |
-          make -C argocd/argocdinit sbom || true
-
-      - name: Run smoke tests (Makefile)
-        run: |
+          # Build single-platform test image and run smoke + functional tests
           make -C argocd/argocdinit test || (echo "smoke tests failed"; exit 1)
+
+      - name: SBOM & Vulnerability Scan
+        run: |
+          # security-scan target depends on sbom and generates *_sbom-* and *-vuln.json
+          make -C argocd/argocdinit security-scan || (echo "security scan failed"; exit 1)
 
       - name: Run BATS tests
         run: |
@@ -57,18 +58,6 @@ jobs:
           # The Makefile builds a single-platform test image tagged with -test-linux-amd64
           export IMAGE=awendt/argocdinit:${{ steps.ver.outputs.version }}-test-linux-amd64
           bats argocd/argocdinit/test/tests.bats
-
-      - name: Start test container for goss
-        run: |
-          # Use the same platform-suffixed test image created by make test
-          export IMAGE=awendt/argocdinit:${{ steps.ver.outputs.version }}-test-linux-amd64
-          docker run -d --name test-container $IMAGE sleep infinity
-
-
-      - name: Stop test container
-        if: always()
-        run: |
-          docker rm -f test-container || true
 
       - name: Upload SBOM & vuln artifacts
         uses: actions/upload-artifact@v4
