@@ -6,6 +6,21 @@ on:
       - 'argocd/argocdinit/**'
       - 'argocd/argocdinit/Dockerfile'
   workflow_dispatch:
+    inputs:
+      extra_tags:
+        description: 'Zusätzliche GHCR-Tags (durch Komma getrennt), z.B. v0.4.0-beta1'
+        required: false
+      upload_to_release:
+        description: 'SBOM & Vulnerability Reports an ein Release anhängen'
+        type: boolean
+        default: false
+      release_tag:
+        description: 'Release-Tagname (z.B. v0.4.0-beta1), benötigt wenn upload_to_release=true'
+        required: false
+      allow_vulnerabilities:
+        description: 'Nicht bei HIGH/CRITICAL Vulnerabilities fehlschlagen'
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -50,6 +65,18 @@ jobs:
           # security-scan target depends on sbom and generates *_sbom-* and *-vuln.json
           make -C argocd/argocdinit security-scan || (echo "security scan failed"; exit 1)
 
+      - name: Fail on HIGH/CRITICAL vulns (can be overridden)
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.allow_vulnerabilities == true) }}
+        run: |
+          version=$(git describe --tags --always --dirty 2>/dev/null || echo "latest")
+          file="argocd/argocdinit/${version}-vuln.json"
+          if [ ! -f "$file" ]; then
+            echo "Vulnerability report not found: $file"; exit 1; fi
+          cnt=$(jq '[.matches[].vulnerability.severity | ascii_downcase | select(.=="high" or .=="critical")] | length' "$file")
+          echo "High/Critical vulnerabilities: $cnt"
+          if [ "$cnt" -gt 0 ]; then
+            echo "Blocking due to HIGH/CRITICAL vulnerabilities"; exit 1; fi
+
       - name: Run BATS tests
         run: |
           git clone https://github.com/bats-core/bats-core.git /tmp/bats-core
@@ -83,6 +110,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -117,6 +145,98 @@ jobs:
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
             export GHCR_OWNER="${FALLBACK_OWNER}"
           fi
+          # Determine version (same logic as build job) and decide tags
+          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "latest")
+          EXTRA_TAGS=""
+          # If VERSION looks like a semver or ends with -beta/-rc, also tag that semver and latest (only if on main)
+          if echo "$VERSION" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+'; then
+            # Strip possible dirty suffix for tagging
+            CLEAN_VERSION=$(echo "$VERSION" | sed 's/-dirty//')
+            EXTRA_TAGS="$CLEAN_VERSION latest"
+          else
+            # Non-semver commit hash -> just latest for convenience
+            EXTRA_TAGS="latest"
+          fi
+          # Append user-provided extra tags (workflow_dispatch)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.extra_tags }}" ]; then
+            ADDTL=$(echo "${{ inputs.extra_tags }}" | tr ',' ' ' | xargs)
+            EXTRA_TAGS="$EXTRA_TAGS $ADDTL"
+          fi
+          echo "Computed EXTRA_TAGS: $EXTRA_TAGS"
+          export EXTRA_TAGS
+          # Push multi-tag image (EXTRA_TAGS consumed by Makefile push-ghcr target)
           make -C argocd/argocdinit push-ghcr
+
+      - name: Output pushed image references
+        run: |
+          echo "Primary tag: ghcr.io/${GHCR_OWNER}/argocdinit:${VERSION}" || true
+          for t in $EXTRA_TAGS; do
+            echo "Additional tag: ghcr.io/${GHCR_OWNER}/argocdinit:$t" || true
+          done
+          echo "Use 'docker pull ghcr.io/${GHCR_OWNER}/argocdinit:${VERSION}' or any additional tag."
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Resolve digest for signing
+        id: digest
+        run: |
+          set -e
+          DIGEST=$(docker buildx imagetools inspect ghcr.io/${GHCR_OWNER}/argocdinit:${VERSION} --format '{{.Descriptor.Digest}}')
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+          echo "Resolved digest: $DIGEST"
+
+      - name: Cosign sign (keyless OIDC)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign sign --yes ghcr.io/${GHCR_OWNER}/argocdinit@${{ steps.digest.outputs.digest }}
+
+      - name: Generate SLSA provenance attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ghcr.io/${{ env.FALLBACK_OWNER }}/argocdinit
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
+
+  attach-to-release:
+    name: Attach SBOM & vuln to Release
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && inputs.upload_to_release == true && inputs.release_tag != '') }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compute version and release tag
+        id: ver
+        run: |
+          version=$(git describe --tags --always --dirty 2>/dev/null || echo "latest")
+          echo "version=$version" >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" = "push" ]; then
+            rel=${GITHUB_REF_NAME}
+          else
+            rel=${{ inputs.release_tag }}
+          fi
+          echo "release_tag=$rel" >> $GITHUB_OUTPUT
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: argocdinit-*-${{ steps.ver.outputs.version }}
+          path: ./release-artifacts
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: |
+          ls -lah ./release-artifacts
+
+      - name: Upload assets to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ steps.ver.outputs.release_tag }}" ./release-artifacts/* --repo "$GITHUB_REPOSITORY" --clobber
 
 

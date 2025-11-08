@@ -9,13 +9,6 @@ BUILD_CONTEXT := .
 # Docker Buildx target
 BUILDER := multiarch-builder
 
-# Optional build cache registry (e.g. ghcr.io/${OWNER}/argocdinit-cache:latest)
-ifndef CACHE_REGISTRY
-	BUILD_CACHE_ARGS :=
-else
-	BUILD_CACHE_ARGS := --cache-from=type=registry,ref=$(CACHE_REGISTRY) --cache-to=type=registry,ref=$(CACHE_REGISTRY),mode=max
-endif
-
 # Default target
 .PHONY: all
 all: patch-dockerfile build
@@ -40,17 +33,17 @@ patch-dockerfile:
 .PHONY: build
 build: builder
 	mkdir -p $(dir $(OUTPUT_TAR)) # Ensure the output directory exists
-	docker buildx build $(BUILD_CACHE_ARGS) --platform $(PLATFORMS) -t $(IMAGE_NAME):$(GIT_VERSION) --output type=oci,dest=$(OUTPUT_TAR) $(BUILD_CONTEXT)
+	docker buildx build --platform $(PLATFORMS) -t $(IMAGE_NAME):$(GIT_VERSION) --output type=oci,dest=$(OUTPUT_TAR) $(BUILD_CONTEXT)
 
 # Build the image for multiple platforms and push to Docker Hub
 .PHONY: push
 push: builder
-	docker buildx build $(BUILD_CACHE_ARGS) --platform $(PLATFORMS) -t $(IMAGE_NAME):$(GIT_VERSION) --push $(BUILD_CONTEXT)
+	docker buildx build --platform $(PLATFORMS) -t $(IMAGE_NAME):$(GIT_VERSION) --push $(BUILD_CONTEXT)
 
 # Build and push the image in one step
 .PHONY: build-push
 build-push: patch-dockerfile builder
-	docker buildx build $(BUILD_CACHE_ARGS) --platform $(PLATFORMS) -t $(IMAGE_NAME):$(GIT_VERSION) --push $(BUILD_CONTEXT)
+	docker buildx build --platform $(PLATFORMS) -t $(IMAGE_NAME):$(GIT_VERSION) --push $(BUILD_CONTEXT)
 
 # Print the Git version (for debugging)
 .PHONY: version
@@ -110,11 +103,13 @@ login-ghcr:
 # Push image to GitHub Container Registry (requires GHCR_OWNER & GHCR_TOKEN or prior login)
 .PHONY: push-ghcr
 push-ghcr: builder
-	@echo "Pushing image to GHCR: ghcr.io/$(GHCR_OWNER)/argocdinit:$(GIT_VERSION)"
+	@echo "Pushing image to GHCR with tags: ghcr.io/$(GHCR_OWNER)/argocdinit:$(GIT_VERSION) $(EXTRA_TAGS)"
 	@if [ -z "$(GHCR_OWNER)" ]; then \
 		echo "GHCR_OWNER not set. Export GHCR_OWNER and GHCR_TOKEN or run make login-ghcr."; exit 1; \
 	fi
-	@docker buildx build --platform $(PLATFORMS) -t ghcr.io/$(GHCR_OWNER)/argocdinit:$(GIT_VERSION) --push $(BUILD_CONTEXT)
+	@extra_tags_args="$(foreach T,$(EXTRA_TAGS),-t ghcr.io/$(GHCR_OWNER)/argocdinit:$(T))"; \
+	echo "Computed extra tag args: $$extra_tags_args"; \
+	docker buildx build --platform $(PLATFORMS) -t ghcr.io/$(GHCR_OWNER)/argocdinit:$(GIT_VERSION) $$extra_tags_args --push $(BUILD_CONTEXT)
 
 # Clean up the builder (optional)
 .PHONY: clean

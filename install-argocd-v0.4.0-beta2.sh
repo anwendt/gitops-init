@@ -206,7 +206,6 @@ function configure_age_key() {
   fi
 }
 
-
 # Function to validate prerequisites
 function validate_prerequisites() {
     echo -e "${GREEN}Validating prerequisites...${RESET}"
@@ -243,7 +242,6 @@ function validate_prerequisites() {
     echo -e "${GREEN}All prerequisites are met.${RESET}"
 }
 
-
 # Best-effort validation for init image availability
 function validate_init_image() {
   echo -e "${GREEN}Checking availability of init image: ${ARGOCD_INIT_IMAGE}${RESET}"
@@ -268,8 +266,6 @@ function validate_init_image() {
     return 0
   fi
 }
-
-
 
 # Function to validate git clone
 function test_git_clone() {
@@ -528,7 +524,6 @@ function deploy_age_key_secret() {
     echo -e "${GREEN}'age' key secret deployed successfully.${RESET}"
 }
 
-
 # Function to wait for ArgoCD CRDs to be ready
 function wait_for_argocd_crds() {
     echo -e "${GREEN}Waiting for ArgoCD CRDs to be registered...${RESET}"
@@ -572,8 +567,6 @@ function wait_for_argocd_ready() {
     done
 }
 
-
-
 # Function to deploy the repository secret
 function deploy_bootstrap_application() {
     echo -e "${GREEN}Deploying argocd bootstrap application...${RESET}"
@@ -614,7 +607,6 @@ spec:
 EOF
     echo -e "${GREEN}Bootstrap application deployed successfully.${RESET}"
 }
-
 
 # Main script execution
 echo -e "${GREEN}Starting ArgoCD installation script...${RESET}"
@@ -673,7 +665,6 @@ get_helm_chart_version
 deploy_argocd
 wait_for_argocd_crds
 wait_for_argocd_ready
-
 
 # Deploy argocd bottstrap application
 deploy_bootstrap_application

@@ -60,15 +60,30 @@ git clone https://github.com/anwendt/gitops-init.git
 cd gitops-init
 ```
 
-### 2. Run the Installer Script
+### 2. Run the Installer Script (latest beta)
 
 Navigate to the `installer/scripts` directory and execute the `install-argocd.sh` script:
 
 ```bash
 export KUBECONFIG="<apth-to-kubeconfig-file>"
 cd installer/scripts
-chmod +x install-argocd.sh
-./install-argocd.sh
+chmod +x installer/scripts/install-argocd.sh
+./installer/scripts/install-argocd.sh
+
+Or download the pinned release script for v0.4.0-beta2:
+
+```bash
+curl -fsSL -o install-argocd-v0.4.0-beta2.sh https://raw.githubusercontent.com/anwendt/gitops-init/v0.4.0-beta2/install-argocd-v0.4.0-beta2.sh
+sha256sum install-argocd-v0.4.0-beta2.sh  # optional integrity check
+chmod +x install-argocd-v0.4.0-beta2.sh
+./install-argocd-v0.4.0-beta2.sh --dry-run # to inspect config
+```
+
+Override the init image if needed:
+
+```bash
+./installer/scripts/install-argocd.sh --argocd-init-image ghcr.io/anwendt/argocdinit:latest
+```
 ```
 
 ### 3. Access ArgoCD
