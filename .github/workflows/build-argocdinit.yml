@@ -72,7 +72,7 @@ jobs:
           export PATH=/tmp/goss/bin:$PATH
 
           # Resolve absolute path to goss.yaml to avoid any CWD issues
-          GOSS_FILE="$GITHUB_WORKSPACE/argocd/argocdinit/test/goss.yaml"
+          GOSS_FILE="$GITHUB_WORKSPACE/goss.yaml"
           echo "Workspace: $GITHUB_WORKSPACE"
           echo "CWD: $(pwd)"
           ls -la "$GITHUB_WORKSPACE/argocd/argocdinit/test" || true
