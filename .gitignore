@@ -36,3 +36,4 @@ __pycache__/
 
 # Git-specific files
 .git/
+installer/scripts/key.txt
