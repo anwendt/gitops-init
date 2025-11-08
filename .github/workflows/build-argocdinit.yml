@@ -80,9 +80,18 @@ jobs:
     needs: build
     # Allow both normal pushes to main and manual workflow_dispatch events on main; parentheses not supported in GitHub Expressions
     if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
       - name: Push to Docker Hub (optional)
         run: |
@@ -94,15 +103,20 @@ jobs:
             echo "DockerHub credentials not set; skipping Docker Hub push"
           fi
 
-      - name: Push to GHCR (optional)
+      - name: Push to GHCR
+        env:
+          FALLBACK_OWNER: ${{ github.repository_owner }}
         run: |
-          if [ -n "${{ secrets.GHCR_OWNER }}" ] && [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_OWNER }} --password-stdin
-            export GHCR_OWNER=${{ secrets.GHCR_OWNER }}
-            echo "Detected version: ${{ needs.build.outputs.version || 'dynamic via git describe' }}"
-            make -C argocd/argocdinit push-ghcr
+          # Prefer explicit secrets if provided, otherwise use GITHUB_TOKEN with packages: write
+          if [ -n "${{ secrets.GHCR_TOKEN }}" ] && [ -n "${{ secrets.GHCR_OWNER }}" ]; then
+            echo "Using GHCR secrets for login"
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_OWNER }}" --password-stdin
+            export GHCR_OWNER="${{ secrets.GHCR_OWNER }}"
           else
-            echo "GHCR credentials not set; skipping GHCR push"
+            echo "Using GITHUB_TOKEN for GHCR login (packages: write required)"
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            export GHCR_OWNER="${FALLBACK_OWNER}"
           fi
+          make -C argocd/argocdinit push-ghcr
 
 
