@@ -70,27 +70,10 @@ jobs:
         run: |
           # security-scan target depends on sbom and generates *_sbom-* and *-vuln.json
           make -C argocd/argocdinit security-scan || (echo "security scan failed"; exit 1)
-          echo "\n==== CI Vulnerability Summary (from JSON) ===="
+          # Die Standardausgabe von grype (table) wurde bereits durch das Makefile gezeigt und nach <version>-vuln.txt geschrieben.
+          # Hier nur ein kurzer Hinweis für Logs:
           version=$(git describe --tags --always --dirty 2>/dev/null || echo "latest")
-          file="argocd/argocdinit/${version}-vuln.json"
-          if command -v jq >/dev/null 2>&1 && [ -f "$file" ]; then
-            jq -r '[ .matches[].vulnerability.severity // "UNKNOWN" | ascii_downcase ] \
-              | {critical: (map(select(.=="critical"))|length), \
-                 high: (map(select(.=="high"))|length), \
-                 medium: (map(select(.=="medium"))|length), \
-                 low: (map(select(.=="low"))|length), \
-                 unknown: (map(select(.!="critical" and .!="high" and .!="medium" and .!="low"))|length) } \
-              | to_entries \
-              | sort_by(.key) \
-              | .[] \
-              | ( .key | ascii_upcase ) + ": " + ( .value | tostring )' "$file"
-          else
-            echo "jq not found or vuln file missing; skipping summary"
-          fi
-          echo "\n==== CI Vulnerabilities (table preview) ===="
-          if [ -f "argocd/argocdinit/${version}-vuln.txt" ]; then
-            sed -n '1,80p' "argocd/argocdinit/${version}-vuln.txt"
-          fi
+          echo "Grype Roh-Ausgabe in: argocd/argocdinit/${version}-vuln.txt"
 
       - name: Run BATS tests
         run: |
@@ -110,6 +93,7 @@ jobs:
             argocd/argocdinit/${{ steps.ver.outputs.version }}-sbom-cyclonedx.json
             argocd/argocdinit/${{ steps.ver.outputs.version }}-sbom-spdx.json
             argocd/argocdinit/${{ steps.ver.outputs.version }}-vuln.json
+            argocd/argocdinit/${{ steps.ver.outputs.version }}-vuln.txt
 
       - name: Upload built OCI tar
         uses: actions/upload-artifact@v4

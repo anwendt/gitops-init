@@ -69,7 +69,10 @@ sbom: builder
 .PHONY: security-scan
 security-scan: sbom
 	@echo "Running vulnerability scan for $(IMAGE_NAME):$(GIT_VERSION)-sbom -> $(GIT_VERSION)-vuln.json"
-	@docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $(CURDIR):/work -w /work anchore/grype:latest docker:$(IMAGE_NAME):$(GIT_VERSION)-sbom -o json > $(GIT_VERSION)-vuln.json || (echo "grype failed with exit code $$?"; true)
+	@# 1) Standard-Konsolenausgabe von grype (Default-Format = table) und gleichzeitig Mitschnitt
+	@docker run --rm -v /var/run/docker.sock:/var/run/docker.sock anchore/grype:latest docker:$(IMAGE_NAME):$(GIT_VERSION)-sbom | tee $(GIT_VERSION)-vuln.txt || true
+	@# 2) Zusätzlich JSON erzeugen (für Gate/Assets)
+	@docker run --rm -v /var/run/docker.sock:/var/run/docker.sock anchore/grype:latest docker:$(IMAGE_NAME):$(GIT_VERSION)-sbom -o json > $(GIT_VERSION)-vuln.json || (echo "grype (json) failed with exit code $$?"; true)
 
 # CI target: build, then create SBOM (and optionally run security-scan)
 .PHONY: ci
