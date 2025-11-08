@@ -75,10 +75,11 @@ jobs:
           path: argocd/argocdinit/${{ steps.ver.outputs.version }}.tar
 
   push-image:
-    name: Push image to registries (only on main)
+    name: Push image to registries (main branch, push or manual dispatch)
     runs-on: ubuntu-latest
     needs: build
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    # Allow both normal pushes to main and manual workflow_dispatch events on main; parentheses not supported in GitHub Expressions
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -98,6 +99,7 @@ jobs:
           if [ -n "${{ secrets.GHCR_OWNER }}" ] && [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_OWNER }} --password-stdin
             export GHCR_OWNER=${{ secrets.GHCR_OWNER }}
+            echo "Detected version: ${{ needs.build.outputs.version || 'dynamic via git describe' }}"
             make -C argocd/argocdinit push-ghcr
           else
             echo "GHCR credentials not set; skipping GHCR push"
