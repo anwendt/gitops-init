@@ -70,6 +70,27 @@ jobs:
         run: |
           # security-scan target depends on sbom and generates *_sbom-* and *-vuln.json
           make -C argocd/argocdinit security-scan || (echo "security scan failed"; exit 1)
+          echo "\n==== CI Vulnerability Summary (from JSON) ===="
+          version=$(git describe --tags --always --dirty 2>/dev/null || echo "latest")
+          file="argocd/argocdinit/${version}-vuln.json"
+          if command -v jq >/dev/null 2>&1 && [ -f "$file" ]; then
+            jq -r '[ .matches[].vulnerability.severity // "UNKNOWN" | ascii_downcase ] \
+              | {critical: (map(select(.=="critical"))|length), \
+                 high: (map(select(.=="high"))|length), \
+                 medium: (map(select(.=="medium"))|length), \
+                 low: (map(select(.=="low"))|length), \
+                 unknown: (map(select(.!="critical" and .!="high" and .!="medium" and .!="low"))|length) } \
+              | to_entries \
+              | sort_by(.key) \
+              | .[] \
+              | ( .key | ascii_upcase ) + ": " + ( .value | tostring )' "$file"
+          else
+            echo "jq not found or vuln file missing; skipping summary"
+          fi
+          echo "\n==== CI Vulnerabilities (table preview) ===="
+          if [ -f "argocd/argocdinit/${version}-vuln.txt" ]; then
+            sed -n '1,80p' "argocd/argocdinit/${version}-vuln.txt"
+          fi
 
       - name: Run BATS tests
         run: |
