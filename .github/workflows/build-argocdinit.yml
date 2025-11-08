@@ -83,7 +83,7 @@ jobs:
 
           # Run validation with explicit file path; goss.yaml runs docker exec against the test-container
           goss --version || true
-          goss validate "$GOSS_FILE" || (echo "goss checks failed"; docker logs test-container || true; exit 1)
+          goss --gossfile "$GOSS_FILE" validate  || (echo "goss checks failed"; docker logs test-container || true; exit 1)
 
       - name: Stop test container
         if: always()
