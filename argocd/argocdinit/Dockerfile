@@ -1,5 +1,5 @@
 # Use specific, pinned Alpine version for consistency and security
-FROM alpine:3.22.3
+FROM alpine:3.21
 
 LABEL org.opencontainers.image.title="argocd init container"
 LABEL org.opencontainers.image.description="A container image that includes helm-secrets and addtional tools sops, argocd-vault-plugin, kubectl, helm, vals, age, yq, and curl."
