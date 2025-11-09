@@ -94,6 +94,8 @@ jobs:
             argocd/argocdinit/${{ steps.ver.outputs.version }}-sbom-spdx.json
             argocd/argocdinit/${{ steps.ver.outputs.version }}-vuln.json
             argocd/argocdinit/${{ steps.ver.outputs.version }}-vuln.txt
+            argocd/argocdinit/${{ steps.ver.outputs.version }}-trivy.json
+            argocd/argocdinit/${{ steps.ver.outputs.version }}-trivy.txt
 
       - name: Upload built OCI tar
         uses: actions/upload-artifact@v4

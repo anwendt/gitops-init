@@ -68,11 +68,23 @@ sbom: builder
 # Use the same single-platform image built for SBOM generation to avoid OCI index parsing issues.
 .PHONY: security-scan
 security-scan: sbom
-	@echo "Running vulnerability scan for $(IMAGE_NAME):$(GIT_VERSION)-sbom -> $(GIT_VERSION)-vuln.json"
-	@# 1) Standard-Konsolenausgabe von grype (Default-Format = table) und gleichzeitig Mitschnitt
+	@echo "Running vulnerability scans (Grype + Trivy) for $(IMAGE_NAME):$(GIT_VERSION)-sbom"
+	@# --- Grype Scan ---
+	@echo "[Grype] table output -> $(GIT_VERSION)-vuln.txt"
 	@docker run --rm -v /var/run/docker.sock:/var/run/docker.sock anchore/grype:latest docker:$(IMAGE_NAME):$(GIT_VERSION)-sbom | tee $(GIT_VERSION)-vuln.txt || true
-	@# 2) Zusätzlich JSON erzeugen (für Gate/Assets)
+	@echo "[Grype] json output -> $(GIT_VERSION)-vuln.json"
 	@docker run --rm -v /var/run/docker.sock:/var/run/docker.sock anchore/grype:latest docker:$(IMAGE_NAME):$(GIT_VERSION)-sbom -o json > $(GIT_VERSION)-vuln.json || (echo "grype (json) failed with exit code $$?"; true)
+	@# --- Trivy Scan ---
+	@echo "[Trivy] table output -> $(GIT_VERSION)-trivy.txt"
+	@docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --scanners vuln --format table $(IMAGE_NAME):$(GIT_VERSION)-sbom | tee $(GIT_VERSION)-trivy.txt || true
+	@echo "[Trivy] json output -> $(GIT_VERSION)-trivy.json"
+	@docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --scanners vuln --format json $(IMAGE_NAME):$(GIT_VERSION)-sbom > $(GIT_VERSION)-trivy.json || (echo "trivy (json) failed with exit code $$?"; true)
+	@# Provide quick combined severity summary (unique HIGH/CRITICAL across both)
+	@echo "[Summary] Counting unique HIGH/CRITICAL (Grype + Trivy)"; \
+	jq -r '.matches[] | select(.vulnerability.severity!=null) | "\(.vulnerability.id):\(.vulnerability.severity)"' $(GIT_VERSION)-vuln.json 2>/dev/null | awk -F: 'tolower($$2)=="high"||tolower($$2)=="critical"{print $$1}' > .grype_hc  || true; \
+	jq -r '.Results[].Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL") | .VulnerabilityID' $(GIT_VERSION)-trivy.json 2>/dev/null > .trivy_hc || true; \
+	cat .grype_hc .trivy_hc 2>/dev/null | sort -u > .combined_hc || true; \
+	count=$$(wc -l < .combined_hc 2>/dev/null || echo 0); echo "Unique HIGH/CRITICAL across scanners: $$count"; rm -f .grype_hc .trivy_hc .combined_hc || true
 
 # CI target: build, then create SBOM (and optionally run security-scan)
 .PHONY: ci
