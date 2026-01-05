@@ -328,14 +328,14 @@ spec:
     global:
       addPrometheusAnnotations: true
     redis-ha:
-      enabled: true
+      enabled: false
       haproxy:
         metrics:
-          enabled: true
+          enabled: false
     repoServer:
       autoscaling:
-        enabled: true
-        minReplicas: 2
+        enabled: false
+        minReplicas: 1
       env:
       - name: HELM_PLUGINS
         value: /custom-tools/helm-plugins/
@@ -407,8 +407,8 @@ spec:
           secretName: helm-secrets-private-keys
     server:
       autoscaling:
-        enabled: true
-        minReplicas: 2
+        enabled: false
+        minReplicas: 1
       config:
         configManagementPlugins: |-
           - name: sops
